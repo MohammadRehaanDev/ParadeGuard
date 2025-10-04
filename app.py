@@ -1,4 +1,4 @@
-# app.py — ParadeGuard (Dark Mode + Styled Background + Overlay)
+
 import streamlit as st
 import requests
 import pandas as pd
@@ -8,20 +8,20 @@ from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 from datetime import date, datetime
 import base64
 
-# ---------- Config ----------
-THEME_COLOR = "#00687a"  # Deep teal for lines
+
+THEME_COLOR = "#00687a"  
 RISK_COLORS = {
-    "Low": "#2ecc71",    # Green
-    "Medium": "#f39c12", # Orange
-    "High": "#e74c3c"    # Red
+    "Low": "#2ecc71",    
+    "Medium": "#f39c12", 
+    "High": "#e74c3c"   
 }
 MISSING_FLAG = -999.0
 MAX_CITY_LENGTH = 100
-# ----------------------------
+
 
 st.set_page_config(page_title="ParadeGuard", page_icon="🌡️", layout="wide")
 
-# ---------- Background Image ----------
+
 def set_background(image_file):
     page_bg = f"""
     <style>
@@ -41,11 +41,11 @@ def get_base64_of_file(file_path):
     with open(file_path, "rb") as f:
         return base64.b64encode(f.read()).decode()
 
-# Load background image (replace with your image path)
+
 image_base64 = get_base64_of_file("background.jpg")
 set_background(image_base64)
 
-# ---------- Overlay Styling (dark transparent layer) ----------
+
 overlay_css = """
 <style>
 .stApp {
@@ -58,11 +58,11 @@ st.markdown(overlay_css, unsafe_allow_html=True)
 
 
 
-# ---------- Sidebar Theme Toggle ----------
+
 st.sidebar.header("⚙️ Settings")
 dark_mode = st.sidebar.checkbox("🌙 Enable Dark Mode")
 
-# ---------- Background Styling ----------
+
 if dark_mode:
     page_bg = """
         <style>
@@ -82,7 +82,7 @@ else:
     """
 st.markdown(page_bg, unsafe_allow_html=True)
 
-# ---------- Hero Banner ----------
+
 banner_color = "linear-gradient(90deg, #003366, #00687a)" if not dark_mode else "linear-gradient(90deg, #141e30, #243b55)"
 st.markdown(
     f"""
@@ -97,7 +97,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ---------- Inputs Section ----------
+
 st.markdown("### 🔍 Enter Event Details")
 with st.container():
     col1, col2 = st.columns([2, 1])
@@ -112,7 +112,7 @@ with st.container():
     with c2:
         user_end = st.date_input("End Date", date(2025, 7, 31))
 
-# ---------- Helpers ----------
+
 def classify_pct(pct: float) -> str:
     if pct < 20.0:
         return "Low"
@@ -137,7 +137,7 @@ def build_df(data_dict: dict) -> pd.DataFrame:
     df = df[df["T2M_MAX"] != MISSING_FLAG]
     return df
 
-# ---------- Button Action ----------
+
 if st.button("🚀 Check Heat Risk"):
     if not city_input.strip():
         st.error("Please enter a city name.")
