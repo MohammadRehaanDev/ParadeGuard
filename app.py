@@ -1,10 +1,7 @@
-
 import streamlit as st
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 from datetime import date, datetime
 import base64
 
@@ -13,7 +10,7 @@ THEME_COLOR = "#00687a"
 RISK_COLORS = {
     "Low": "#2ecc71",    
     "Medium": "#f39c12", 
-    "High": "#e74c3c"   
+    "High": "#e74c3c"    
 }
 MISSING_FLAG = -999.0
 MAX_CITY_LENGTH = 100
@@ -23,67 +20,76 @@ st.set_page_config(page_title="ParadeGuard", page_icon="🌡️", layout="wide")
 
 
 def set_background(image_file):
+    with open(image_file, "rb") as f:
+        encoded = base64.b64encode(f.read()).decode()
     page_bg = f"""
     <style>
     .stApp {{
-        background: url("data:image/png;base64,{image_file}") no-repeat center center fixed;
+        background: url("data:image/jpg;base64,{encoded}") no-repeat center center fixed;
         background-size: cover;
-        color: white;
-    }}
-    .stMarkdown, .stTextInput, .stDateInput, .stSelectbox, .stButton {{
-        color: white;
     }}
     </style>
     """
     st.markdown(page_bg, unsafe_allow_html=True)
 
-def get_base64_of_file(file_path):
-    with open(file_path, "rb") as f:
-        return base64.b64encode(f.read()).decode()
+try:
+    set_background("background.jpg")
+except:
+    pass  
 
 
-image_base64 = get_base64_of_file("background.jpg")
-set_background(image_base64)
-
-
-overlay_css = """
+white_text_css = """
 <style>
-.stApp {
-    background-color: rgba(0, 0, 0, 0.65);  /* dark transparent overlay */
-    background-blend-mode: multiply;        /* blends overlay with bg image */
+/* Make ALL text white and bold */
+body, .stApp, .stMarkdown, .stText, 
+.stDateInput label, .stTextInput label, 
+.stRadio label, .stSelectbox label, 
+.stNumberInput label {
+    color: white !important;
+    font-weight: 600 !important;
+}
+
+/* Headers */
+h1, h2, h3, h4, h5, h6 {
+    color: white !important;
+    font-weight: 700 !important;
+}
+
+/* Inputs */
+input, textarea {
+    color: white !important;
+    background-color: rgba(0,0,0,0.5) !important;
+    border: 1px solid #ccc;
+}
+
+/* Buttons */
+button[kind="primary"], .stButton > button {
+    color: white !important;
+    background-color: #00687a !important;
+    border-radius: 6px;
+    border: none;
+    font-weight: 700 !important;
+}
+
+/* Ensure Quick Stats section is white */
+[data-testid="stMetricLabel"], 
+[data-testid="stMetricValue"] {
+    color: white !important;
+    font-weight: 700 !important;
+}
+
+/* Ensure radio group label (Choose input method) is white */
+[data-testid="stRadio"] label, 
+[data-testid="stRadio"] p {
+    color: white !important;
+    font-weight: 600 !important;
 }
 </style>
 """
-st.markdown(overlay_css, unsafe_allow_html=True)
+st.markdown(white_text_css, unsafe_allow_html=True)
 
 
-
-
-st.sidebar.header("⚙️ Settings")
-dark_mode = st.sidebar.checkbox("🌙 Enable Dark Mode")
-
-
-if dark_mode:
-    page_bg = """
-        <style>
-        body {
-            background: linear-gradient(135deg, #0d1b2a, #1b263b, #415a77);
-            color: white !important;
-        }
-        </style>
-    """
-else:
-    page_bg = """
-        <style>
-        body {
-            background: linear-gradient(135deg, #f0f9ff, #e6f7f7, #ffffff);
-        }
-        </style>
-    """
-st.markdown(page_bg, unsafe_allow_html=True)
-
-
-banner_color = "linear-gradient(90deg, #003366, #00687a)" if not dark_mode else "linear-gradient(90deg, #141e30, #243b55)"
+banner_color = "linear-gradient(90deg, #003366, #00687a)"
 st.markdown(
     f"""
     <div style="background: {banner_color}; padding: 1.2em; border-radius: 10px; text-align:center;">
@@ -99,18 +105,61 @@ st.markdown(
 
 
 st.markdown("### 🔍 Enter Event Details")
-with st.container():
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        city_input = st.text_input("📍 City", placeholder="e.g., New Delhi")
-    with col2:
-        st.caption("Use official city names for best results")
 
-    c1, c2 = st.columns(2)
-    with c1:
-        user_start = st.date_input("Start Date", date(2025, 6, 1))
-    with c2:
-        user_end = st.date_input("End Date", date(2025, 7, 31))
+
+if "lat" not in st.session_state:
+    st.session_state.lat = None
+    st.session_state.lon = None
+    st.session_state.display_name = None
+
+mode = st.radio("Choose input method:", ["City Name", "Latitude/Longitude"])
+
+if mode == "City Name":
+    city_input = st.text_input("📍 City", placeholder="e.g., New Delhi")
+
+    def geocode_city(city: str):
+        url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1&language=en&format=json"
+        try:
+            r = requests.get(url, timeout=10).json()
+            if "results" in r and len(r["results"]) > 0:
+                loc = r["results"][0]
+                return loc["latitude"], loc["longitude"], loc["name"]
+        except:
+            return None
+        return None
+
+    if st.button("🔍 Resolve Location"):
+        if not city_input.strip():
+            st.error("Please enter a valid city name.")
+        elif len(city_input) > MAX_CITY_LENGTH:
+            st.error("City name too long.")
+        else:
+            geo = geocode_city(city_input)
+            if not geo:
+                st.error("City not found in geocoding database.")
+            else:
+                st.session_state.lat, st.session_state.lon, st.session_state.display_name = geo
+                st.success(
+                    f"Resolved: {st.session_state.display_name} "
+                    f"(lat={st.session_state.lat:.2f}, lon={st.session_state.lon:.2f})"
+                )
+
+else:  
+    col1, col2 = st.columns(2)
+    with col1:
+        st.session_state.lat = st.number_input("Latitude", format="%.4f")
+    with col2:
+        st.session_state.lon = st.number_input("Longitude", format="%.4f")
+    if st.session_state.lat and st.session_state.lon:
+        st.session_state.display_name = f"Manual Location ({st.session_state.lat:.2f}, {st.session_state.lon:.2f})"
+        st.success(f"Using coordinates: {st.session_state.display_name}")
+
+
+c1, c2 = st.columns(2)
+with c1:
+    user_start = st.date_input("Start Date", date(2025, 6, 1))
+with c2:
+    user_end = st.date_input("End Date", date(2025, 7, 31))
 
 
 def classify_pct(pct: float) -> str:
@@ -139,122 +188,113 @@ def build_df(data_dict: dict) -> pd.DataFrame:
 
 
 if st.button("🚀 Check Heat Risk"):
-    if not city_input.strip():
-        st.error("Please enter a city name.")
-    elif len(city_input) > MAX_CITY_LENGTH:
-        st.error("City name too long. Please enter a shorter name.")
+    if not st.session_state.lat or not st.session_state.lon:
+        st.error("No valid location selected. Please resolve city or enter lat/lon.")
     elif user_start > user_end:
         st.error("Start date must be before end date.")
     else:
+        lat, lon = st.session_state.lat, st.session_state.lon
+        st.info(f"Using coordinates: {lat:.2f}, {lon:.2f}")
+
         try:
-            geolocator = Nominatim(user_agent="parade_guard_app", timeout=10)
-            location = geolocator.geocode(city_input)
-        except (GeocoderTimedOut, GeocoderServiceError):
-            location = None
-
-        if not location:
-            st.error("City not found or geocoding service unavailable.")
-        else:
-            lat, lon = location.latitude, location.longitude
-            st.info(f"Using coordinates: {lat:.2f}, {lon:.2f}")
-
-            try:
-                ten_years_start = user_start.replace(year=user_start.year - 10)
-            except ValueError:
-                if user_start.month == 2 and user_start.day == 29:
-                    ten_years_start = user_start.replace(year=user_start.year - 10, day=28)
-                else:
-                    ten_years_start = user_start
-
-            start_str = ten_years_start.strftime("%Y%m%d")
-            end_str = user_end.strftime("%Y%m%d")
-
-            url = (
-                f"https://power.larc.nasa.gov/api/temporal/daily/point"
-                f"?start={start_str}&end={end_str}&latitude={lat}&longitude={lon}"
-                f"&community=SB&parameters=T2M_MAX&format=JSON"
-            )
-
-            with st.spinner("Fetching NASA POWER data..."):
-                response = fetch_nasa_url(url)
-
-            if "error" in response:
-                st.error(f"NASA API error: {response['error']}")
-            elif "properties" not in response:
-                st.error("Unexpected NASA response format.")
+            ten_years_start = user_start.replace(year=user_start.year - 10)
+        except ValueError:
+            if user_start.month == 2 and user_start.day == 29:
+                ten_years_start = user_start.replace(year=user_start.year - 10, day=28)
             else:
-                raw = response["properties"]["parameter"].get("T2M_MAX", {})
-                df_all = build_df(raw)
+                ten_years_start = user_start
 
-                if df_all.empty:
-                    st.warning("No valid data available for this location and period.")
-                else:
-                    start_md = (user_start.month, user_start.day)
-                    end_md = (user_end.month, user_end.day)
+        start_str = ten_years_start.strftime("%Y%m%d")
+        end_str = user_end.strftime("%Y%m%d")
 
-                    def in_range(d):
-                        md = (d.month, d.day)
-                        if start_md <= end_md:
-                            return start_md <= md <= end_md
-                        else:
-                            return md >= start_md or md <= end_md
+        url = (
+            f"https://power.larc.nasa.gov/api/temporal/daily/point"
+            f"?start={start_str}&end={end_str}&latitude={lat}&longitude={lon}"
+            f"&community=SB&parameters=T2M_MAX&format=JSON"
+        )
 
-                    df_window = df_all[df_all["date"].apply(in_range)]
+        with st.spinner("Fetching NASA POWER data..."):
+            response = fetch_nasa_url(url)
 
-                    if df_window.empty:
-                        st.warning("No records matched the exact month-day window.")
+        if "error" in response:
+            st.error(f"NASA API error: {response['error']}")
+        elif "properties" not in response:
+            st.error("Unexpected NASA response format.")
+        else:
+            raw = response["properties"]["parameter"].get("T2M_MAX", {})
+            df_all = build_df(raw)
+
+            if df_all.empty:
+                st.warning("No valid data available for this location and period.")
+            else:
+                
+                start_md = (user_start.month, user_start.day)
+                end_md = (user_end.month, user_end.day)
+
+                def in_range(d):
+                    md = (d.month, d.day)
+                    if start_md <= end_md:
+                        return start_md <= md <= end_md
                     else:
-                        hot_days = (df_window["T2M_MAX"] > 35).sum()
-                        total_days = len(df_window)
-                        pct = (hot_days / total_days) * 100
-                        risk = classify_pct(pct)
+                        return md >= start_md or md <= end_md
 
-                        now = datetime.now()
-                        if user_end.year >= now.year:
-                            st.info(f"Note: Data for {now.year} may be incomplete (only up to today).")
+                df_window = df_all[df_all["date"].apply(in_range)]
 
-                        icon = "🟢" if risk=="Low" else "🟠" if risk=="Medium" else "🔴"
-                        st.markdown(
-                            f"<div style='padding:1em; background-color:{RISK_COLORS[risk]}; "
-                            f"color:white; text-align:center; border-radius:8px; font-size:1.6em;'>"
-                            f"{icon} Heat Risk: <b>{risk}</b> ({pct:.2f}% days > 35°C)"
-                            "</div>",
-                            unsafe_allow_html=True,
-                        )
+                if df_window.empty:
+                    st.warning("No records matched the exact month-day window.")
+                else:
+                    hot_days = (df_window["T2M_MAX"] > 35).sum()
+                    total_days = len(df_window)
+                    pct = (hot_days / total_days) * 100
+                    risk = classify_pct(pct)
 
-                        df_window.set_index("date", inplace=True)
-                        yearly_hot = df_window.resample("YE").apply(lambda x: (x["T2M_MAX"] > 35).sum())
+                    now = datetime.now()
+                    if user_end.year >= now.year:
+                        st.info(f"Note: Data for {now.year} may be incomplete (only up to today).")
 
-                        fig, ax = plt.subplots(facecolor="black" if dark_mode else "white")
-                        ax.plot(
-                            yearly_hot.index.year,
-                            yearly_hot.values,
-                            marker="o",
-                            color=THEME_COLOR,
-                            linewidth=2,
-                            label="Hot Days (>35°C)",
-                        )
-                        ax.set_xlabel("Year", color="white" if dark_mode else "black")
-                        ax.set_ylabel("Number of Hot Days", color="white" if dark_mode else "black")
-                        ax.set_title("Annual Hot Days in Selected Period", color="white" if dark_mode else "black")
-                        ax.tick_params(colors="white" if dark_mode else "black")
-                        ax.legend()
+                    icon = "🟢" if risk=="Low" else "🟠" if risk=="Medium" else "🔴"
+                    st.markdown(
+                        f"<div style='padding:1em; background-color:{RISK_COLORS[risk]}; "
+                        f"color:white; text-align:center; border-radius:8px; font-size:1.6em;'>"
+                        f"{icon} Heat Risk: <b>{risk}</b> ({pct:.2f}% days > 35°C)"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
 
-                        col_chart, col_stats = st.columns([3, 1])
-                        with col_chart:
-                            st.pyplot(fig)
-                        with col_stats:
-                            st.markdown("### 📊 Quick Stats")
-                            st.metric("Total Days", total_days)
-                            st.metric("Hot Days", int(hot_days))
-                            st.metric("Risk %", f"{pct:.2f}%")
+                    
+                    df_window.set_index("date", inplace=True)
+                    yearly_hot = df_window.resample("YE").apply(lambda x: (x["T2M_MAX"] > 35).sum())
 
-                        st.markdown(
-                            """
-                            <hr>
-                            <div style="text-align:center; font-size:14px; color:gray;">
-                                Built with NASA POWER Data • Hackathon Edition 🌍🚀
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
+                    fig, ax = plt.subplots(facecolor="black")
+                    ax.plot(
+                        yearly_hot.index.year,
+                        yearly_hot.values,
+                        marker="o",
+                        color=THEME_COLOR,
+                        linewidth=2,
+                        label="Hot Days (>35°C)",
+                    )
+                    ax.set_xlabel("Year", color="white")
+                    ax.set_ylabel("Number of Hot Days", color="white")
+                    ax.set_title("Annual Hot Days in Selected Period", color="white")
+                    ax.tick_params(colors="white")
+                    ax.legend()
+
+                    col_chart, col_stats = st.columns([3, 1])
+                    with col_chart:
+                        st.pyplot(fig)
+                    with col_stats:
+                        st.markdown("### 📊 Quick Stats")
+                        st.metric("Total Days", total_days)
+                        st.metric("Hot Days", int(hot_days))
+                        st.metric("Risk %", f"{pct:.2f}%")
+
+                    st.markdown(
+                        """
+                        <hr>
+                        <div style="text-align:center; font-size:14px; color:white;">
+                            Built with NASA POWER Data • Hackathon Edition 🌍🚀
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
